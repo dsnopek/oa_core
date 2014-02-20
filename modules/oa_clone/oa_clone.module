@@ -262,7 +262,7 @@ function oa_clone($original_node, $space_nid = NULL, $section_nid = NULL) {
     }
   }
   if ($section_nid) {
-    $clone->oa_section_ref[LANGUAGE_NONE][0]['target_id'] = $section_nid;
+    $node->oa_section_ref[LANGUAGE_NONE][0]['target_id'] = $section_nid;
   }
 
   $context = array('method' => 'save-edit', 'original_node' => $original_node);
