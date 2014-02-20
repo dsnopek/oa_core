@@ -234,33 +234,46 @@ function oa_clone_clone_node_alter(&$node, $context) {
 /**
  * Clones a node using the 'clone' module.
  *
- * @param object $original_node
- *   The node object that we are cloning.
- * @param object $account
- *   (Optional) The user object to be the author of the node.
+ * @param object|int $original_node
+ *   The node object or nid that we are cloning.
+ * @param int $space_nid
+ *   (Optional) The nid of the Space to add this node to.
+ * @param int $section_nid
+ *   (Optional) The nid of the Section to add this node to.
  *
  * @return object
  *   The new node object that was created.
  */
-function oa_clone($original_node, $account = NULL) {
+function oa_clone($original_node, $space_nid = NULL, $section_nid = NULL) {
   module_load_include('inc', 'clone', 'clone.pages');
-  $node = _clone_node_prepare($original_node, FALSE, $account);
+
+  if (!is_object($original_node)) {
+    $original_node = node_load($original_node);
+    $original_node->oa_clone_skip = TRUE;
+  }
+
+  $node = _clone_node_prepare($original_node, FALSE);
+  if ($space_nid) {
+    if ($node->type == 'oa_space') {
+      $node->oa_parent_space[LANGUAGE_NONE][0]['target_id'] = $space_nid;
+    }
+    else {
+      $node->og_group_ref[LANGUAGE_NONE][0]['target_id'] = $space_nid;
+    }
+  }
+  if ($section_nid) {
+    $clone->oa_section_ref[LANGUAGE_NONE][0]['target_id'] = $section_nid;
+  }
+
   $context = array('method' => 'save-edit', 'original_node' => $original_node);
   drupal_alter('clone_node', $node, $context);
-  return $node;
-}
 
-/**
- * Save a cloned node, invoking Rules if necessary.
- *
- * @param object $node
- *   The node object that will be saved.
- */
-function oa_clone_save($node) {
   node_save($node);
   if (module_exists('rules')) {
     rules_invoke_event('clone_node', $node, $original_node);
   }
+
+  return $node;
 }
 
 /**
@@ -303,20 +316,7 @@ function oa_clone_node_insert($node) {
         break;
 
       case 'oa_space':
-        // Clone all the sections in this Space.
-        foreach (array_keys(oa_core_space_sections($original_nid)) as $original_section_nid) {
-          $original_section = node_load($original_section_nid);
-          $original_section->oa_clone_skip = TRUE;
-
-          $clone_section = oa_clone($original_section);
-          $clone_section->og_group_ref[LANGUAGE_NONE][0]['target_id'] = $node->nid;
-          oa_clone_save($clone_section);
-
-          $batch['operations'][] = array('oa_clone_batch_clone_section_content', array($clone_section, $original_section->nid));
-        }
-
-        // TODO: Find all the sub-spaces in this Space and clone them.
-        // TODO: Find all non-section / non-sub-space content in this Space and clone it.
+        _oa_clone_batch_space($batch, $node, $original_nid);
         break;
 
       case 'oa_group':
@@ -326,6 +326,28 @@ function oa_clone_node_insert($node) {
 
     batch_set($batch);
   }
+}
+
+/**
+ * Recursively clone a Space while setting up a batch for cloning content.
+ */
+function _oa_clone_batch_space(&$batch, $space, $original_space_nid) {
+  // Clone all the Sections in this Space.
+  foreach (array_keys(oa_core_space_sections($original_space_nid)) as $original_section_nid) {
+    $clone_section = oa_clone($original_section_nid, $space->nid);
+    $batch['operations'][] = array('oa_clone_batch_clone_section_content', array($clone_section, $original_section_nid));
+  }
+
+  // Clone all sub-Spaces in this Space.
+  $associated_entities = og_subgroups_get_associated_entities('node', $original_space_nid);
+  if (!empty($associated_entities['node'])) {
+    foreach ($associated_entities['node'] as $original_subspace_nid) {
+      $clone_subspace = oa_clone($original_subspace_nid, $space->nid);
+      _oa_clone_batch_space($batch, $clone_subspace, $original_subspace_nid);
+    }
+  }
+
+  // TODO: Find all non-section / non-sub-space content in this Space and clone it.
 }
 
 /**
@@ -347,7 +369,6 @@ function oa_clone_batch_clone_section_content($node, $original_nid, &$context) {
     $context['sandbox']['nid'] = $node->nid;
     $context['sandbox']['progress'] = 0;
     $context['results']['total'] = (!empty($context['results']['total']) ? $context['results']['total'] : 0) + $context['sandbox']['max'];
-
   }
 
   // Get the next node.
@@ -362,10 +383,7 @@ function oa_clone_batch_clone_section_content($node, $original_nid, &$context) {
   $original_node->oa_clone_skip = TRUE;
 
   // Clone it, setting to the new Space and Section.
-  $clone = oa_clone($original_node);
-  $clone->og_group_ref[LANGUAGE_NONE][0]['target_id'] = $node->og_group_ref[LANGUAGE_NONE][0]['target_id'];
-  $clone->oa_section_ref[LANGUAGE_NONE][0]['target_id'] = $node->nid;
-  oa_clone_save($clone);
+  $clone = oa_clone($original_node, $node->og_group_ref[LANGUAGE_NONE][0]['target_id'], $node->nid);
 
   // Bump the progress indicator.
   $context['sandbox']['progress']++;
