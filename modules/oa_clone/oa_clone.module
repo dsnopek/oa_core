@@ -298,6 +298,29 @@ function oa_clone_get_section_content($nid) {
 }
 
 /**
+ * Gets all the memberships within a particular Group.
+ *
+ * @param int $nid
+ *   The node ID of the Group.
+ *
+ * @return array
+ *   An array of og_membership IDs.
+ */
+function oa_clone_get_group_memberships($nid) {
+  $query = new EntityFieldQuery();
+  $query
+    ->entityCondition('entity_type', 'og_membership')
+    ->propertyCondition('group_type', 'node')
+    ->propertyCondition('gid', $nid)
+    ->propertyCondition('entity_type', 'user');
+  $result = $query->execute();
+  if (isset($result['og_membership'])) {
+    return array_keys($result['og_membership']);
+  }
+  return array();
+}
+
+/**
  * Implements hook_entity_insert().
  */
 function oa_clone_node_insert($node) {
@@ -320,7 +343,7 @@ function oa_clone_node_insert($node) {
         break;
 
       case 'oa_group':
-        // TODO: clone all the user memberships in this group.
+        $batch['operations'][] = array('oa_clone_batch_clone_group_memberships', array($node, $original_nid));
         break;
     }
 
@@ -384,6 +407,47 @@ function oa_clone_batch_clone_section_content($node, $original_nid, &$context) {
 
   // Clone it, setting to the new Space and Section.
   $clone = oa_clone($original_node, $node->og_group_ref[LANGUAGE_NONE][0]['target_id'], $node->nid);
+
+  // Bump the progress indicator.
+  $context['sandbox']['progress']++;
+
+  // Report progress if not finished and run again.
+  $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
+}
+
+/**
+ * Callback for cloning all the memberships in a group.
+ *
+ * @param object $node
+ *   Node object representing the Group we are going to popuplate.
+ * @param int $original_nid
+ *   The node ID of the original Group we are cloning data from.
+ * @param array &$context
+ *   A place where we can store values that need to b passed from one iteration
+ *   of this batch operation to the next.
+ */
+function oa_clone_batch_clone_group_memberships($node, $original_nid, &$context) {
+  // The first time through, set up all the variables.
+  if (empty($context['sandbox']['max'])) {
+    $context['sandbox']['membership_ids'] = oa_clone_get_group_memberships($original_nid);
+    $context['sandbox']['max'] = count($context['sandbox']['membership_ids']);
+    $context['sandbox']['gid'] = $node->nid;
+    $context['sandbox']['progress'] = 0;
+  }
+
+  // Get the next node.
+  $next_id = array_shift($context['sandbox']['membership_ids']);
+  if (!$next_id) {
+    $context['sandbox']['finished'] = TRUE;
+    return;
+  }
+
+  // Clone the original membership, change it to the new group and save.
+  $original_membership = og_membership_load($next_id);
+  $membership = clone $original_membership;
+  $membership->id = NULL;
+  $membership->gid = $node->nid;
+  og_membership_save($membership);
 
   // Bump the progress indicator.
   $context['sandbox']['progress']++;
