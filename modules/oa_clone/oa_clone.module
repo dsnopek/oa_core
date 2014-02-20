@@ -303,8 +303,18 @@ function oa_clone_node_insert($node) {
         break;
 
       case 'oa_space':
-        // TODO: Find all the sections in this Space and clone them.
-        //       Use oa_core_space_sections($gid);
+        // Clone all the sections in this Space.
+        foreach (array_keys(oa_core_space_sections($original_nid)) as $original_section_nid) {
+          $original_section = node_load($original_section_nid);
+          $original_section->oa_clone_skip = TRUE;
+
+          $clone_section = oa_clone($original_section);
+          $clone_section->og_group_ref[LANGUAGE_NONE][0]['target_id'] = $node->nid;
+          oa_clone_save($clone_section);
+
+          $batch['operations'][] = array('oa_clone_batch_clone_section_content', array($clone_section, $original_section->nid));
+        }
+
         // TODO: Find all the sub-spaces in this Space and clone them.
         // TODO: Find all non-section / non-sub-space content in this Space and clone it.
         break;
@@ -353,7 +363,7 @@ function oa_clone_batch_clone_section_content($node, $original_nid, &$context) {
 
   // Clone it, setting to the new Space and Section.
   $clone = oa_clone($original_node);
-  $clone->oa_group_ref[LANGUAGE_NONE][0]['target_id'] = $node->oa_group_ref[LANGUAGE_NONE][0]['target_id'];
+  $clone->og_group_ref[LANGUAGE_NONE][0]['target_id'] = $node->og_group_ref[LANGUAGE_NONE][0]['target_id'];
   $clone->oa_section_ref[LANGUAGE_NONE][0]['target_id'] = $node->nid;
   oa_clone_save($clone);
 
@@ -369,7 +379,8 @@ function oa_clone_batch_clone_section_content($node, $original_nid, &$context) {
  */
 function oa_clone_batch_finished($success, $results, $operations) {
   if ($success) {
-    drupal_set_message(t('Finished cloning @num_ids peices of content successfully.', array('@num_ids' => $results['total'])));
+    $total = !empty($results['total']) ? $results['total'] : 0;
+    drupal_set_message(t('Finished cloning @num_ids peices of content successfully.', array('@num_ids' => $total + 1)));
   }
   else {
     drupal_set_message(t('Error cloning content.'), 'error');
