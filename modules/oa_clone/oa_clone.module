@@ -411,6 +411,7 @@ function oa_clone_node_insert($node) {
 
       case 'oa_group':
         $batch['operations'][] = array('oa_clone_batch_clone_group_memberships', array($node, $original_nid));
+        $batch['operations'][] = array('oa_clone_batch_clone_group_metadata', array($node, $original_nid));
         break;
     }
 
@@ -422,6 +423,9 @@ function oa_clone_node_insert($node) {
  * Recursively clone a Space while setting up a batch for cloning content.
  */
 function _oa_clone_batch_space(&$batch, $space, $original_space_nid) {
+  // Clone the OG metadata.
+  $batch['operations'][] = array('oa_clone_batch_clone_group_metadata', array($space, $original_space_nid));
+
   // Clone all the Sections in this Space.
   foreach (array_keys(oa_core_space_sections($original_space_nid)) as $original_section_nid) {
     if ($clone_section = oa_clone($original_section_nid, $space->nid)) {
@@ -524,6 +528,30 @@ function oa_clone_batch_clone_group_memberships($node, $original_nid, &$context)
 
   // Report progress if not finished and run again.
   $context['finished'] = $context['sandbox']['progress'] / $context['sandbox']['max'];
+}
+
+/**
+ * Callback for cloning Organic Groups metadata (variables, permisssions, etc).
+ *
+ * @param object $node
+ *   Node object representing the Space or Group that we are going to configure.
+ * @param int $original_nid
+ *   The node ID of the original Space or Group we are cloning metadata from.
+ * @param array &$context
+ *   A place where we can store values that need to b passed from one iteration
+ *   of this batch operation to the next.
+ */
+function oa_clone_batch_clone_group_metadata($node, $original_nid, &$context) {
+  // Clone OG variables.
+  foreach (variable_realm_controller('og')->getEnabledVariables() as $name) {
+    variable_realm_set('og', 'node_' . $node->nid, $name, variable_realm_get('og', 'node_' . $original_nid, $name));
+  }
+
+  // TODO: Clone OG roles.
+  // TODO: Clone OG permissions.
+
+  // Allow other modules to copy group metadata too.
+  module_invoke_all('oa_clone_group_metadata', $node, $original_nid);
 }
 
 /**
