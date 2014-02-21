@@ -219,7 +219,7 @@ function oa_clone_form_oa_space_node_form_alter(&$form, &$form_state, &$form_id)
 /**
  * Implements hook_form_FORM_ID_alter().
  */
-function oa_clone_form_oa_section_node_form_alter(&$form, &$form_state) {
+function oa_clone_form_node_form_alter(&$form, &$form_state) {
   $node = $form['#node'];
 
   // Fix a weird bug where the 'Other groups' field is always filled on clone
@@ -245,7 +245,9 @@ function oa_clone_clone_node_alter(&$node, $context) {
 }
 
 /**
- * Clones a node using the 'clone' module.
+ * Prepares a node to be cloned via the 'clone' module.
+ *
+ * After you've made any changes, save it using oa_clone_save().
  *
  * @param object|int $original_node
  *   The node object or nid that we are cloning.
@@ -254,10 +256,14 @@ function oa_clone_clone_node_alter(&$node, $context) {
  * @param int $section_nid
  *   (Optional) The nid of the Section to add this node to.
  *
- * @return object
- *   The new node object that was created.
+ * @return object|NULL
+ *   The new node object that was created or NULL if the user doesn't have
+ *   access to clone it.
+ *
+ * @see oa_clone_save()
+ * @see oa_clone()
  */
-function oa_clone($original_node, $space_nid = NULL, $section_nid = NULL) {
+function oa_clone_prepare($original_node, $space_nid = NULL, $section_nid = NULL) {
   if (clone_access_cloning($original_node)) {
     module_load_include('inc', 'clone', 'clone.pages');
 
@@ -282,13 +288,55 @@ function oa_clone($original_node, $space_nid = NULL, $section_nid = NULL) {
     $context = array('method' => 'save-edit', 'original_node' => $original_node);
     drupal_alter('clone_node', $node, $context);
 
-    node_save($node);
-    if (module_exists('rules')) {
-      rules_invoke_event('clone_node', $node, $original_node);
-    }
-
     return $node;
   }
+}
+
+/**
+ * Saves a cloned node via the 'clone' module.
+ *
+ * You should have created the original $node object via the oa_clone_prepare()
+ * function.
+ *
+ * @param $node
+ *   The new node object to be saved.
+ *
+ * @see oa_clone_prepare()
+ * @see oa_clone()
+ */
+function oa_clone_save($node) {
+  node_save($node);
+  if (module_exists('rules')) {
+    rules_invoke_event('clone_node', $node, $original_node);
+  }
+}
+
+/**
+ * Clones a node using the 'clone' module.
+ *
+ * This is just a shortcut for calling oa_clone_prepare() and then
+ * oa_clone_save().
+ *
+ * @param object|int $original_node
+ *   The node object or nid that we are cloning.
+ * @param int $space_nid
+ *   (Optional) The nid of the Space to add this node to.
+ * @param int $section_nid
+ *   (Optional) The nid of the Section to add this node to.
+ *
+ * @return object|NULL
+ *   The new node object that was created or NULL if the user doesn't have
+ *   access to clone it.
+ *
+ * @see oa_clone_prepare()
+ * @see oa_clone_save()
+ */
+function oa_clone($original_node, $space_nid = NULL, $section_nid = NULL) {
+  $node = oa_clone_prepare($original_node, $space_nid, $section_nid);
+  if ($node) {
+    oa_clone_save($node);
+  }
+  return $node;
 }
 
 /**
