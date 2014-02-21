@@ -255,6 +255,8 @@ function oa_clone_clone_node_alter(&$node, $context) {
  *   (Optional) The nid of the Space to add this node to.
  * @param int $section_nid
  *   (Optional) The nid of the Section to add this node to.
+ * @param boolean $bypass_access_check
+ *   (Optional) If set to TRUE, the access check will be bypassed.
  *
  * @return object|NULL
  *   The new node object that was created or NULL if the user doesn't have
@@ -263,8 +265,8 @@ function oa_clone_clone_node_alter(&$node, $context) {
  * @see oa_clone_save()
  * @see oa_clone()
  */
-function oa_clone_prepare($original_node, $space_nid = NULL, $section_nid = NULL) {
-  if (clone_access_cloning($original_node)) {
+function oa_clone_prepare($original_node, $space_nid = NULL, $section_nid = NULL, $bypass_access_check = FALSE) {
+  if ($bypass_access_check || clone_access_cloning($original_node)) {
     module_load_include('inc', 'clone', 'clone.pages');
 
     if (!is_object($original_node)) {
@@ -323,6 +325,8 @@ function oa_clone_save($node) {
  *   (Optional) The nid of the Space to add this node to.
  * @param int $section_nid
  *   (Optional) The nid of the Section to add this node to.
+ * @param boolean $bypass_access_check
+ *   (Optional) If set to TRUE, the access check will be bypassed.
  *
  * @return object|NULL
  *   The new node object that was created or NULL if the user doesn't have
@@ -331,8 +335,8 @@ function oa_clone_save($node) {
  * @see oa_clone_prepare()
  * @see oa_clone_save()
  */
-function oa_clone($original_node, $space_nid = NULL, $section_nid = NULL) {
-  $node = oa_clone_prepare($original_node, $space_nid, $section_nid);
+function oa_clone($original_node, $space_nid = NULL, $section_nid = NULL, $bypass_access_check = FALSE) {
+  $node = oa_clone_prepare($original_node, $space_nid, $section_nid, $bypass_access_check);
   if ($node) {
     oa_clone_save($node);
   }
