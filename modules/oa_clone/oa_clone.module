@@ -266,13 +266,13 @@ function oa_clone_clone_node_alter(&$node, $context) {
  * @see oa_clone()
  */
 function oa_clone_prepare($original_node, $space_nid = NULL, $section_nid = NULL, $bypass_access_check = FALSE) {
+  if (!is_object($original_node)) {
+    $original_node = node_load($original_node);
+    $original_node->oa_clone_skip = TRUE;
+  }
+
   if ($bypass_access_check || clone_access_cloning($original_node)) {
     module_load_include('inc', 'clone', 'clone.pages');
-
-    if (!is_object($original_node)) {
-      $original_node = node_load($original_node);
-      $original_node->oa_clone_skip = TRUE;
-    }
 
     $node = _clone_node_prepare($original_node, FALSE);
     if ($space_nid) {
