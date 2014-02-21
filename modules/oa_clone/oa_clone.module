@@ -217,6 +217,19 @@ function oa_clone_form_oa_space_node_form_alter(&$form, &$form_state, &$form_id)
 }
 
 /**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function oa_clone_form_oa_section_node_form_alter(&$form, &$form_state) {
+  $node = $form['#node'];
+
+  // Fix a weird bug where the 'Other groups' field is always filled on clone
+  // with the same data as the 'Your groups' field. We just clear it out.
+  if (!empty($node->clone_from_original_nid) && isset($form['og_group_ref'][LANGUAGE_NONE][0]['admin'])) {
+    $form['og_group_ref'][LANGUAGE_NONE][0]['admin'][0]['target_id']['#default_value'] = '';
+  }
+}
+
+/**
  * Implements hook_clone_node_alter().
  */
 function oa_clone_clone_node_alter(&$node, $context) {
