@@ -17,6 +17,42 @@ define('OA_CLONE_ACTION_PATH', 'node/%node/clone/%clone_token');
 define('OA_CLONE_CREATE_SPACE_PATH', 'node/add/oa-space/%');
 
 /**
+ * Implements hook_menu().
+ */
+function oa_clone_menu() {
+  $items = array();
+  $items['node/%node/oa_clone_create_space_type'] = array(
+    'title' => 'Create Space Type from this Space',
+    'page callback' => 'oa_clone_create_space_type_page_callback',
+    'page arguments' => array(1),
+    'access callback' => 'oa_clone_create_space_type_access_callback',
+    'access arguments' => array(1),
+    'type' => MENU_LOCAL_TASK,
+  );
+  return $items;
+}
+
+/**
+ * Access callback: Check if the user can create a Space type from this node.
+ */
+function oa_clone_create_space_type_access_callback($node) {
+  $vid = taxonomy_vocabulary_machine_name_load('space_type')->vid;
+  return $node->type == 'oa_space' && user_access("edit terms in $vid") && node_access('view', $node);
+}
+
+/**
+ * Page callback: Redirect user to create a new Space type using a node.
+ */
+function oa_clone_create_space_type_page_callback($node) {
+  drupal_goto('admin/structure/taxonomy/space_type/add', array(
+    'query' => array(
+      'oa_clone_space' => $node->nid,
+      'destination' => "node/{$node->nid}",
+    ),
+  ));
+}
+
+/**
  * Implements hook_menu_alter().
  */
 function oa_clone_menu_alter(&$items) {
@@ -212,7 +248,21 @@ function oa_clone_clone_access_alter(&$access, $node) {
 /**
  * Implements hook_form_FORM_ID_alter().
  */
-function oa_clone_form_oa_space_node_form_alter(&$form, &$form_state, &$form_id) {
+function oa_clone_form_taxonomy_form_term_alter(&$form, &$form_state, $form_id) {
+  $vocabulary = $form['#vocabulary'];
+  if ($vocabulary->machine_name == 'space_type' && !empty($_GET['oa_clone_space']) && ($space = node_load($_GET['oa_clone_space']))) {
+    // Put the Space information in there by default.
+    $form['name']['#default_value'] = $space->title . ' ' . t('Space');
+    $form['description']['#default_value'] = t('A new Space that is just like @title.', array('@title' => $space->title));
+    $form['field_oa_clone_enabled'][LANGUAGE_NONE]['#default_value'] = TRUE;
+    $form['field_oa_clone_space'][LANGUAGE_NONE][0]['target_id']['#default_value'] = $space->title . " ({$space->nid})";
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function oa_clone_form_oa_space_node_form_alter(&$form, &$form_state) {
   $form['field_oa_space_type'][LANGUAGE_NONE]['#description'] = t('Changing the <em>Space type</em> after the Space has already been created, will only affect the default dashboard layout and available types - not content or configuration.');
 }
 
