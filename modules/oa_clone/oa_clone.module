@@ -258,35 +258,37 @@ function oa_clone_clone_node_alter(&$node, $context) {
  *   The new node object that was created.
  */
 function oa_clone($original_node, $space_nid = NULL, $section_nid = NULL) {
-  module_load_include('inc', 'clone', 'clone.pages');
+  if (clone_access_cloning($original_node)) {
+    module_load_include('inc', 'clone', 'clone.pages');
 
-  if (!is_object($original_node)) {
-    $original_node = node_load($original_node);
-    $original_node->oa_clone_skip = TRUE;
-  }
-
-  $node = _clone_node_prepare($original_node, FALSE);
-  if ($space_nid) {
-    if ($node->type == 'oa_space') {
-      $node->oa_parent_space[LANGUAGE_NONE][0]['target_id'] = $space_nid;
+    if (!is_object($original_node)) {
+      $original_node = node_load($original_node);
+      $original_node->oa_clone_skip = TRUE;
     }
-    else {
-      $node->og_group_ref[LANGUAGE_NONE][0]['target_id'] = $space_nid;
+
+    $node = _clone_node_prepare($original_node, FALSE);
+    if ($space_nid) {
+      if ($node->type == 'oa_space') {
+        $node->oa_parent_space[LANGUAGE_NONE][0]['target_id'] = $space_nid;
+      }
+      else {
+        $node->og_group_ref[LANGUAGE_NONE][0]['target_id'] = $space_nid;
+      }
     }
-  }
-  if ($section_nid) {
-    $node->oa_section_ref[LANGUAGE_NONE][0]['target_id'] = $section_nid;
-  }
+    if ($section_nid) {
+      $node->oa_section_ref[LANGUAGE_NONE][0]['target_id'] = $section_nid;
+    }
 
-  $context = array('method' => 'save-edit', 'original_node' => $original_node);
-  drupal_alter('clone_node', $node, $context);
+    $context = array('method' => 'save-edit', 'original_node' => $original_node);
+    drupal_alter('clone_node', $node, $context);
 
-  node_save($node);
-  if (module_exists('rules')) {
-    rules_invoke_event('clone_node', $node, $original_node);
+    node_save($node);
+    if (module_exists('rules')) {
+      rules_invoke_event('clone_node', $node, $original_node);
+    }
+
+    return $node;
   }
-
-  return $node;
 }
 
 /**
@@ -370,16 +372,18 @@ function oa_clone_node_insert($node) {
 function _oa_clone_batch_space(&$batch, $space, $original_space_nid) {
   // Clone all the Sections in this Space.
   foreach (array_keys(oa_core_space_sections($original_space_nid)) as $original_section_nid) {
-    $clone_section = oa_clone($original_section_nid, $space->nid);
-    $batch['operations'][] = array('oa_clone_batch_clone_section_content', array($clone_section, $original_section_nid));
+    if ($clone_section = oa_clone($original_section_nid, $space->nid)) {
+      $batch['operations'][] = array('oa_clone_batch_clone_section_content', array($clone_section, $original_section_nid));
+    }
   }
 
   // Clone all sub-Spaces in this Space.
   $associated_entities = og_subgroups_get_associated_entities('node', $original_space_nid);
   if (!empty($associated_entities['node'])) {
     foreach ($associated_entities['node'] as $original_subspace_nid) {
-      $clone_subspace = oa_clone($original_subspace_nid, $space->nid);
-      _oa_clone_batch_space($batch, $clone_subspace, $original_subspace_nid);
+      if ($clone_subspace = oa_clone($original_subspace_nid, $space->nid)) {
+        _oa_clone_batch_space($batch, $clone_subspace, $original_subspace_nid);
+      }
     }
   }
 
@@ -420,6 +424,7 @@ function oa_clone_batch_clone_section_content($node, $original_nid, &$context) {
 
   // Clone it, setting to the new Space and Section.
   $clone = oa_clone($original_node, $node->og_group_ref[LANGUAGE_NONE][0]['target_id'], $node->nid);
+  // Remeber: $clone can be NULL, if the user doesn't have permission to clone this node!
 
   // Bump the progress indicator.
   $context['sandbox']['progress']++;
