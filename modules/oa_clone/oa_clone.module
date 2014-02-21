@@ -547,8 +547,23 @@ function oa_clone_batch_clone_group_metadata($node, $original_nid, &$context) {
     variable_realm_set('og', 'node_' . $node->nid, $name, variable_realm_get('og', 'node_' . $original_nid, $name));
   }
 
-  // TODO: Clone OG roles.
-  // TODO: Clone OG permissions.
+  // Clone OG roles.
+  $original_role_map = array();
+  $original_roles = og_roles('node', $node->type, $original_nid);
+  foreach ($original_roles as $original_rid => $original_name) {
+    $original_role_map[$original_name] = $original_rid;
+    // If this is a custom role, then we have to create it.
+    if (!in_array($original_name, array(OG_ANONYMOUS_ROLE, OG_AUTHENTICATED_ROLE, OG_ADMINISTRATOR_ROLE))) {
+      $role = og_role_create($original_name, 'node', $node->nid, $node->type);
+      og_role_save($role);
+    }
+  }
+
+  // Clone OG permissions.
+  $permissions = og_role_permissions($original_roles);
+  foreach (og_roles('node', $node->type, $node->nid) as $rid => $name) {
+    og_role_change_permissions($rid, $permissions[$original_role_map[$name]]);
+  }
 
   // Allow other modules to copy group metadata too.
   module_invoke_all('oa_clone_group_metadata', $node, $original_nid);
